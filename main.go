@@ -5,9 +5,12 @@ import (
 	Dao "echo/dao"
 	"fmt"
 	"net/http"
+	"time"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/garyburd/redigo/redis"
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 )
 
 var msvr *server
@@ -16,7 +19,11 @@ type server struct {
 	DB    *sql.DB
 	Redis redis.Conn
 }
-
+type jwtCustomClaims struct {
+	Name  string `json:"name"`
+	Admin bool   `json:"admin"`
+	jwt.StandardClaims
+}
 type User struct {
 	Name      string `json:"name"`
 	Age       int    `json:"age"`
@@ -39,6 +46,33 @@ func GetResponse(code int, message string, data interface{}) *Response {
 		Data:    data,
 	}
 	return rep
+}
+
+// login ...
+func login(c echo.Context) error {
+	phone := c.FormValue("phone")
+	password := c.FormValue("password")
+	if phone == "Yeah" && password == "123456" {
+		// Set custom claims
+		claims := &jwtCustomClaims{
+			"Yeah",
+			true,
+			jwt.StandardClaims{
+				ExpiresAt: time.Now().Add(time.Hour * 1).Unix(),
+			},
+		}
+		// Create token with claims
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		// Generate encoded token and send it as response.
+		t, err := token.SignedString([]byte("secret"))
+		if err != nil {
+			return err
+		}
+		return c.JSON(http.StatusOK, echo.Map{
+			"token": t,
+		})
+	}
+	return echo.ErrUnauthorized
 }
 
 // 查询单条数据 ...
@@ -131,11 +165,18 @@ func main() {
 	if err != nil {
 		fmt.Printf("%v\n", err)
 	}
-	e.GET("/queryInfo", queryInfo)
-	e.GET("/queryList", getList)
-	e.GET("/delUser", delUser)
-	e.POST("/addUser", addUser)
-	e.POST("/updateUser", updateUser)
+	e.POST("/login", login)
+	g := e.Group("/api")
+	config := middleware.JWTConfig{
+		Claims:     &jwtCustomClaims{},
+		SigningKey: []byte("secret"),
+	}
+	g.Use(middleware.JWTWithConfig(config))
+	g.GET("/queryInfo", queryInfo)
+	g.GET("/queryList", getList)
+	g.GET("/delUser", delUser)
+	g.POST("/addUser", addUser)
+	g.POST("/updateUser", updateUser)
 
 	e.Start(":8888")
 }
