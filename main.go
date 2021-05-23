@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+
 	Dao "echo/dao"
+	models "echo/models"
 	"fmt"
 	"net/http"
 	"time"
@@ -24,23 +26,13 @@ type jwtCustomClaims struct {
 	Admin bool   `json:"admin"`
 	jwt.StandardClaims
 }
-type User struct {
-	Name      string `json:"name"`
-	Age       int    `json:"age"`
-	Id        int    `json:"id"`
-	Phone     string `json:"phone"`
-	Hobby     string `json:"hobby"`
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime"`
-}
-type Response struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data"`
+type Psd struct {
+	Name     string `json:"name"`
+	Password string `json:"password"`
 }
 
-func GetResponse(code int, message string, data interface{}) *Response {
-	rep := &Response{
+func GetResponse(code int, message string, data interface{}) *models.Response {
+	rep := &models.Response{
 		Code:    code,
 		Message: message,
 		Data:    data,
@@ -52,13 +44,19 @@ func GetResponse(code int, message string, data interface{}) *Response {
 func login(c echo.Context) error {
 	phone := c.FormValue("phone")
 	password := c.FormValue("password")
-	if phone == "Yeah" && password == "123456" {
+	corPassword := &Psd{}
+	err := msvr.DB.QueryRow(Dao.GetUserPassword, phone).Scan(&corPassword.Name, &corPassword.Password)
+	if err != nil {
+		fmt.Printf("%v\n", err)
+		return err
+	}
+	if password == corPassword.Password {
 		// Set custom claims
 		claims := &jwtCustomClaims{
-			"Yeah",
+			phone,
 			true,
 			jwt.StandardClaims{
-				ExpiresAt: time.Now().Add(time.Hour * 1).Unix(),
+				ExpiresAt: time.Now().Add(time.Minute * 1).Unix(),
 			},
 		}
 		// Create token with claims
@@ -69,7 +67,8 @@ func login(c echo.Context) error {
 			return err
 		}
 		return c.JSON(http.StatusOK, echo.Map{
-			"token": t,
+			"token":    t,
+			"userName": corPassword.Name,
 		})
 	}
 	return echo.ErrUnauthorized
@@ -77,7 +76,7 @@ func login(c echo.Context) error {
 
 // 查询单条数据 ...
 func queryInfo(c echo.Context) error {
-	user := &User{}
+	user := &models.User{}
 	err := msvr.DB.QueryRow(Dao.UserInfoSql, int(1)).Scan(&user.Name, &user.Age, &user.Id, &user.Phone, &user.Hobby, &user.StartTime, &user.EndTime)
 	if err != nil {
 		return err
@@ -87,14 +86,14 @@ func queryInfo(c echo.Context) error {
 
 // 查询列表数据 ...
 func getList(c echo.Context) error {
-	list := []User{}
+	list := []models.User{}
 	rows, err := msvr.DB.Query(Dao.GetUserList)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		user := &User{}
+		user := &models.User{}
 		if err = rows.Scan(&user.Name, &user.Age, &user.Id, &user.Phone, &user.Hobby, &user.StartTime, &user.EndTime); err != nil {
 			fmt.Printf("err: %v\n", err)
 			return err
@@ -106,7 +105,7 @@ func getList(c echo.Context) error {
 
 // 新增数据
 func addUser(c echo.Context) error {
-	u := new(User)
+	u := new(models.User)
 	c.Bind(u)
 	rst, err := msvr.DB.Exec(Dao.AddUser, u.Name, u.Age, u.Phone, u.Hobby)
 	if err != nil {
@@ -136,7 +135,7 @@ func delUser(c echo.Context) error {
 
 // 更新数据
 func updateUser(c echo.Context) error {
-	u := new(User)
+	u := new(models.User)
 	c.Bind(u)
 	fmt.Printf("user: %v\n", u)
 	rst, err := msvr.DB.Exec(Dao.Updateuser, u.Name, u.Age, u.Phone, u.Hobby, u.Id)

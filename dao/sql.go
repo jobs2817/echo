@@ -11,4 +11,6 @@ var (
 	DelUser = "DELETE FROM user WHERE id = ?"
 	// 更新数据
 	Updateuser = "UPDATE user SET name = ?, age = ?, phone = ?, hobby = ? WHERE id = ?"
+	// 查询密码
+	GetUserPassword = "SELECT name, password FROM user WHERE phone = ?"
 )
